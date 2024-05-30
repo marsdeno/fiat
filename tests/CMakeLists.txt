@@ -136,7 +136,7 @@ ecbuild_add_test(
     LINKER_LANGUAGE Fortran )
 
 target_link_libraries( fiat_test_bytes_io ${MPI_Fortran_LIBRARIES} )
-target_include_directories( fiat_test_byes_io PUBLIC ${MPI_Fortran_INCLUDE_DIRS} )
+target_include_directories( fiat_test_bytes_io PUBLIC ${MPI_Fortran_INCLUDE_DIRS} )
 
 # ----------------------------------------------------------------------------------------
 # Tests: fiat_test_mpl_no_output
