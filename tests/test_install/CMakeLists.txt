@@ -16,10 +16,14 @@ if( TARGET parkind_dp )
 ecbuild_add_executable( TARGET  main_dp
                         SOURCES main.F90
                         LIBS    fiat parkind_dp )
+target_link_libraries( main_dp ${MPI_Fortran_LIBRARIES} )
+target_include_directories( main_dp PUBLIC ${MPI_Fortran_INCLUDE_DIRS} )
 endif()
 
 if( TARGET parkind_sp )
 ecbuild_add_executable( TARGET  main_sp
                         SOURCES main.F90
                         LIBS    fiat parkind_sp )
+target_link_libraries( main_sp ${MPI_Fortran_LIBRARIES} )
+target_include_directories( main_sp PUBLIC ${MPI_Fortran_INCLUDE_DIRS} )
 endif()
