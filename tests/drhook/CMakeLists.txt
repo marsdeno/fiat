@@ -30,6 +30,8 @@ ecbuild_add_executable( TARGET drhook_ex5
   LINKER_LANGUAGE Fortran
   NOINSTALL )
 
+target_link_libraries( drhook_ex5 ${MPI_Fortran_LIBRARIES} )
+target_include_directories( drhook_ex5 PUBLIC ${MPI_Fortran_INCLUDE_DIRS} )
 
 set( FPE_TRAPPING_SUPPORTED 1 )
 if( APPLE )
