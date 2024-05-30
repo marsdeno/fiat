@@ -105,6 +105,10 @@ ecbuild_add_test(
     LIBS    fiat ${OMP} ${FCKIT_LIB}
     LINKER_LANGUAGE Fortran
     DEFINITIONS ${FCKIT_DEFINITIONS})
+
+target_link_libraries( fiat_test_drhook_fortran ${MPI_Fortran_LIBRARIES} )
+target_include_directories( fiat_test_drhook_fortran PUBLIC ${MPI_Fortran_INCLUDE_DIRS} )
+
 set_tests_properties(fiat_test_drhook_fortran PROPERTIES
     ENVIRONMENT "MPL=0;DR_HOOK_ASSERT_MPI_INITIALIZED=0;DR_HOOK_OPT=NOPROPAGATE_SIGNALS"
     PASS_REGULAR_EXPRESSION "EC_DRHOOK.*\[DrHookCallTree\]" )
@@ -138,6 +142,9 @@ ecbuild_add_executable(
     LIBS    fiat
     LINKER_LANGUAGE Fortran
     NOINSTALL )
+
+target_link_libraries( fiat-test-mpl-no-output ${MPI_Fortran_LIBRARIES} )
+target_include_directories( fiat-test-mpl-no-output PUBLIC ${MPI_Fortran_INCLUDE_DIRS} )
 
 add_test(NAME fiat_test_mpl_no_output
          COMMAND ${CMAKE_COMMAND}
