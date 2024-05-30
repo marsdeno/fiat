@@ -123,6 +123,9 @@ ecbuild_add_test(
     LIBS    fiat ${OMP}
     LINKER_LANGUAGE Fortran )
 
+target_link_libraries( fiat_test_ec_args_fortran ${MPI_Fortran_LIBRARIES} )
+target_include_directories( fiat_test_ec_args_fortran PUBLIC ${MPI_Fortran_INCLUDE_DIRS} )
+
 # ----------------------------------------------------------------------------------------
 # Tests: fiat_test_bytes_io
 
@@ -131,6 +134,9 @@ ecbuild_add_test(
     SOURCES test_bytes_io.F90 
     LIBS    fiat
     LINKER_LANGUAGE Fortran )
+
+target_link_libraries( fiat_test_bytes_io ${MPI_Fortran_LIBRARIES} )
+target_include_directories( fiat_test_byes_io PUBLIC ${MPI_Fortran_INCLUDE_DIRS} )
 
 # ----------------------------------------------------------------------------------------
 # Tests: fiat_test_mpl_no_output
@@ -163,6 +169,10 @@ ecbuild_add_executable(
     LIBS    fiat ${OMP}
     LINKER_LANGUAGE Fortran
     NOINSTALL )
+
+target_link_libraries( fiat-test-abor1 ${MPI_Fortran_LIBRARIES} )
+target_include_directories( fiat-test-abor1 PUBLIC ${MPI_Fortran_INCLUDE_DIRS} )
+    
 add_test(NAME fiat_test_abor1
       COMMAND ${CMAKE_COMMAND}
       "-DEXECUTABLE=$<TARGET_FILE:fiat-test-abor1>"
