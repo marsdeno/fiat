@@ -33,7 +33,7 @@ ecbuild_add_executable(
   NOINSTALL)
 
 target_link_libraries( fiat-test-abort-exception-handler ${MPI_Fortran_LIBRARIES} )
-target_include_directories( fiat-test-abort-exception-handler ${MPI_Fortran_INCLUDE_DIRS} )
+target_include_directories( fiat-test-abort-exception-handler PUBLIC ${MPI_Fortran_INCLUDE_DIRS} )
   
 add_test(NAME fiat_test_abort_exception_handler
   COMMAND ${CMAKE_COMMAND}
