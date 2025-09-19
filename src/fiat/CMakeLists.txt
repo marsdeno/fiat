@@ -88,6 +88,8 @@ ecbuild_add_library( TARGET fiat
     PRIVATE_LIBS 
         ${CMAKE_DL_LIBS}
         ${RT_LIB}
+        $<${HAVE_ACC}:OpenACC::OpenACC_Fortran>
+        $<${HAVE_OMP_OFFLOAD}:OpenMP::OpenMP_Fortran>
     PRIVATE_INCLUDES
         ${CMAKE_CURRENT_SOURCE_DIR}/drhook/internal
         ${CMAKE_CURRENT_SOURCE_DIR}/ecsort/internal

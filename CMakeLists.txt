@@ -68,6 +68,21 @@ ecbuild_add_option( FEATURE WARNINGS
                     DEFAULT ON
                     DESCRIPTION "Add warnings to compiler" )
 
+ecbuild_add_option( FEATURE ACC
+                    DEFAULT OFF
+                    DESCRIPTION "Support for GPU-aware MPI with OpenACC"
+                    REQUIRED_PACKAGES "OpenACC COMPONENTS Fortran" )
+
+ecbuild_add_option( FEATURE OMP_OFFLOAD
+                    DEFAULT OFF
+                    DESCRIPTION "Support for GPU-aware MPI with OpenMP "
+                    REQUIRED_PACKAGES "OpenMP COMPONENTS Fortran" )
+
+ecbuild_add_option( FEATURE MPL_DEVICE_AWARE
+                    DESCRIPTION "Enable MPL layer to pass device addresses to MPI (GPU-aware MPI)"
+                    DEFAULT OFF
+                    CONDITION HAVE_ACC OR HAVEOMP_OFFLOAD)
+
 if(CMAKE_C_COMPILER_ID STREQUAL "PGI" OR CMAKE_C_COMPILER_ID STREQUAL "NVHPC" )
     set (DEFAULT_DR_HOOK_NVTX ON)
 else()
