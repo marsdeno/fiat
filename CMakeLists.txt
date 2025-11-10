@@ -97,6 +97,19 @@ add_subdirectory(share)
 
 add_subdirectory(tests)
 
+cmake_policy(SET CMP0079 NEW)
+# Link mpi_serial library to targets with SERIAL property.
+set(MPI_SERIAL_LIBRARIES ${_whole_archive} mpi_serial ${_no_whole_archive})
+if(HAVE_MPI)
+  foreach(target ${${PROJECT_NAME}_ALL_EXES})
+    get_target_property(serial ${target} SERIAL)
+    if(serial)
+      message("Adding serial mpi libraries ( ${MPI_SERIAL_LIBRARIES} ) to ${target} ")
+      target_link_libraries(${target} ${MPI_SERIAL_LIBRARIES})
+    endif()
+  endforeach()
+endif()
+
 ### Export
 
 if (fiat_HAVE_MPL_F77_DEPRECATED)
