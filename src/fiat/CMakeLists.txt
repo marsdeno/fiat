@@ -88,6 +88,8 @@ ecbuild_add_library( TARGET fiat
     PRIVATE_LIBS 
         ${CMAKE_DL_LIBS}
         ${RT_LIB}
+    PUBLIC_LIBS
+        $<IF:$<NOT:$<BOOL:${HAVE_MPI}>>,mpi_serial,>
     PRIVATE_INCLUDES
         ${CMAKE_CURRENT_SOURCE_DIR}/drhook/internal
         ${CMAKE_CURRENT_SOURCE_DIR}/ecsort/internal
@@ -165,8 +167,6 @@ endif()
 if( HAVE_MPI )
     target_link_libraries( fiat PUBLIC ${MPI_Fortran_LIBRARIES} )
     target_include_directories( fiat PUBLIC ${MPI_Fortran_INCLUDE_DIRS} )
-else()
-    target_link_libraries( fiat PRIVATE  mpi_serial )
 endif()
 
 if( HAVE_OMP )
