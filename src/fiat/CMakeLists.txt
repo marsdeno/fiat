@@ -82,14 +82,20 @@ ecbuild_list_exclude_pattern( LIST fiat_src REGEX drhook/extensions/*)
 
 set( fiat_src ${fiat_src} PARENT_SCOPE )
 
+if (HAVE_MPI)
+  set (FIAT_MPI_LIBRARIES MPI::MPI_Fortran)
+else()
+  set (FIAT_MPI_LIBRARIES ${MPI_SERIAL_LIBRARIES}) # or something like this?
+endif()
+
 ecbuild_add_library( TARGET fiat
     LINKER_LANGUAGE Fortran
     SOURCES ${fiat_src} ${CMAKE_CURRENT_BINARY_DIR}/version.c
     PRIVATE_LIBS 
         ${CMAKE_DL_LIBS}
         ${RT_LIB}
-    PUBLIC_LIBS
-        $<IF:$<NOT:$<BOOL:${HAVE_MPI}>>,mpi_serial,>
+    PRIVATE_LIBS
+        ${FIAT_MPI_LIBRARIES}
     PRIVATE_INCLUDES
         ${CMAKE_CURRENT_SOURCE_DIR}/drhook/internal
         ${CMAKE_CURRENT_SOURCE_DIR}/ecsort/internal
@@ -101,6 +107,7 @@ ecbuild_add_library( TARGET fiat
         $<BUILD_INTERFACE:${PROJECT_BINARY_DIR}/include/fiat>
         $<INSTALL_INTERFACE:include>
         $<INSTALL_INTERFACE:include/fiat>
+        ${MPI_Fortran_INCLUDE_DIRS}
 )
 
 if (HAVE_DR_HOOK_NVTX)
@@ -162,11 +169,6 @@ target_compile_definitions( fiat PRIVATE ${FIAT_DEFINITIONS} )
 
 if( HAVE_FCKIT )
     target_link_libraries( fiat PRIVATE fckit )
-endif()
-
-if( HAVE_MPI )
-    target_link_libraries( fiat PUBLIC ${MPI_Fortran_LIBRARIES} )
-    target_include_directories( fiat PUBLIC ${MPI_Fortran_INCLUDE_DIRS} )
 endif()
 
 if( HAVE_OMP )
