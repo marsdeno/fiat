@@ -26,9 +26,11 @@ ecbuild_add_option( FEATURE OMP
                     DESCRIPTION "Support for OpenMP shared memory parallelism"
                     REQUIRED_PACKAGES "OpenMP COMPONENTS Fortran" )
 
+	    set (CMAKE_FIND_DEBUG_MODE TRUE)
 ecbuild_add_option( FEATURE MPI
                     DESCRIPTION "Support for MPI distributed parallelism"
                     REQUIRED_PACKAGES "MPI COMPONENTS Fortran" )
+	    set (CMAKE_FIND_DEBUG_MODE FALSE )
 
 ecbuild_add_option( FEATURE DR_HOOK_PAPI
                     DEFAULT OFF
