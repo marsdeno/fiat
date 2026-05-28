@@ -25,6 +25,17 @@ if( FIAT_ATTRIBUTE_CONSTRUCTOR_SUPPORTED )
   list( APPEND FIAT_DEFINITIONS FIAT_ATTRIBUTE_CONSTRUCTOR_SUPPORTED )
 endif()
 
+# GPU-aware trickery for device-resident arguments to MPL_xx routines
+if( NOT HAVE_MPL_F77_DEPRECATED )
+  if( CMAKE_Fortran_COMPILER_ID MATCHES "NVHPC|LLVMFlang" )
+    list( APPEND FIAT_DEFINITIONS "IGNORE_DEVICE=!DIR$ IGNORE_TKR(cd)")
+    list( APPEND FIAT_DEFINITIONS "IGNORE_CONTIG_DEVICE=!DIR$ IGNORE_TKR(cd)")
+  else()
+    list( APPEND FIAT_DEFINITIONS "IGNORE_DEVICE=!!not using IGNORE_TKR for")
+    list( APPEND FIAT_DEFINITIONS "IGNORE_CONTIG_DEVICE=!!not using IGNORE_TKR for")
+  endif()
+endif()
+
 ### Compilation flags
 
 if( CMAKE_Fortran_COMPILER_ID MATCHES "Intel" )
@@ -74,14 +85,49 @@ if( HAVE_MPL_F77_DEPRECATED)
       "mpl/mpl_module.F90" "mpl/mpl_bindc.F90" )
     ecbuild_info( "FIAT building with *deprecated* F77 (mpif.h) MPL interface" )
 else()
+    fiat_preprocess_fypp_sources( fiat_mpl_f08_fypp_src
+        SOURCES
+            mpl/internal_f08/mpl_send_mod.fypp
+            mpl/internal_f08/mpl_send_implementation_mod.fypp
+            mpl/internal_f08/mpl_recv_mod.fypp
+            mpl/internal_f08/mpl_recv_implementation_mod.fypp
+            mpl/internal_f08/mpl_broadcast_mod.fypp
+            mpl/internal_f08/mpl_broadcast_implementation_mod.fypp
+            mpl/internal_f08/mpl_allgatherv_mod.fypp
+            mpl/internal_f08/mpl_allgatherv_implementation_mod.fypp
+            mpl/internal_f08/mpl_gatherv_mod.fypp
+            mpl/internal_f08/mpl_gatherv_implementation_mod.fypp
+            mpl/internal_f08/mpl_scatterv_mod.fypp
+            mpl/internal_f08/mpl_scatterv_implementation_mod.fypp
+            mpl/internal_f08/mpl_alltoallv_mod.fypp
+            mpl/internal_f08/mpl_alltoallv_implementation_mod.fypp
+#        DEPENDS
+#            ${CMAKE_CURRENT_SOURCE_DIR}/mpl/internal_f08/mpl_allgatherv_preamble.i90
+#            ${CMAKE_CURRENT_SOURCE_DIR}/mpl/internal_f08/mpl_allreduce_implementation_mod.F90
+    )
+
+    if( CMAKE_Fortran_COMPILER_ID MATCHES "NVHPC" )
+      set_property( SOURCE ${CMAKE_CURRENT_BINARY_DIR}/mpl/internal_f08/mpl_send_implementation_mod.F90 APPEND PROPERTY COMPILE_OPTIONS "-w" )
+      # Disable warnings for following:
+      #    NVFORTRAN-W-0435-Array declared with zero size ( ZDUM(1:0) )
+    endif()
+
     ecbuild_list_add_pattern( LIST fiat_src GLOB
       "mpl/internal_f08/*.c" "mpl/internal_f08/*.F*"
       "mpl/mpl_module.F90" "mpl/mpl_bindc.F90" )
+    ecbuild_list_exclude_pattern( LIST fiat_src REGEX mpl/internal_f08/mpl_send_mod.F90 )
+    ecbuild_list_exclude_pattern( LIST fiat_src REGEX mpl/internal_f08/mpl_recv_mod.F90 )
+    ecbuild_list_exclude_pattern( LIST fiat_src REGEX mpl/internal_f08/mpl_broadcast_mod.F90 )
+    ecbuild_list_exclude_pattern( LIST fiat_src REGEX mpl/internal_f08/mpl_allgatherv_mod.F90 )
+    ecbuild_list_exclude_pattern( LIST fiat_src REGEX mpl/internal_f08/mpl_gatherv_mod.F90 )
+    ecbuild_list_exclude_pattern( LIST fiat_src REGEX mpl/internal_f08/mpl_scatterv_mod.F90 )
+    ecbuild_list_exclude_pattern( LIST fiat_src REGEX mpl/internal_f08/mpl_alltoallv_mod.F90 )
     if( HAVE_MPI )
         ecbuild_info( "Not compiling mpi_f08_dummy_mod, because MPI is found" )
         ecbuild_list_exclude_pattern( LIST fiat_src REGEX mpl/internal_f08/mpi_f08_dummy_mod.F90 )
     endif()
     ecbuild_info( "FIAT building with MPI_F08 MPL interface" )
+    list( APPEND fiat_src ${fiat_mpl_f08_fypp_src} )
 endif()
 ecbuild_list_exclude_pattern( LIST fiat_src REGEX drhook/extensions/*)
 

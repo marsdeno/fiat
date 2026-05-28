@@ -1,0 +1,117 @@
+! (C) Copyright 2005- ECMWF.
+! (C) Copyright 2013- Meteo-France.
+!
+! This software is licensed under the terms of the Apache Licence Version 2.0
+! which can be obtained at http://www.apache.org/licenses/LICENSE-2.0.
+! In applying this licence, ECMWF does not waive the privileges and immunities
+! granted to it by virtue of its status as an intergovernmental organisation
+! nor does it submit to any jurisdiction.
+!
+#:mute
+
+#:set array_procs = [dict(name="REAL4", buf="PBUF", ftype="REAL", kind="JPRM", dims=":", ignore_device=True), dict(name="REAL42", buf="PBUF", ftype="REAL", kind="JPRM", dims=":,:", ignore_device=True), dict(name="REAL43", buf="PBUF", ftype="REAL", kind="JPRM", dims=":,:,:", ignore_device=True), dict(name="REAL44", buf="PBUF", ftype="REAL", kind="JPRM", dims=":,:,:,:", ignore_device=True), dict(name="REAL8", buf="PBUF", ftype="REAL", kind="JPRD", dims=":", ignore_device=True), dict(name="REAL82", buf="PBUF", ftype="REAL", kind="JPRD", dims=":,:", ignore_device=True), dict(name="REAL83", buf="PBUF", ftype="REAL", kind="JPRD", dims=":,:,:", ignore_device=True), dict(name="REAL84", buf="PBUF", ftype="REAL", kind="JPRD", dims=":,:,:,:", ignore_device=True), dict(name="LONG", buf="KBUF", ftype="INTEGER", kind="JPIB", dims=":", ignore_device=True), dict(name="INT", buf="KBUF", ftype="INTEGER", kind="JPIM", dims=":", ignore_device=True), dict(name="INT2", buf="KBUF", ftype="INTEGER", kind="JPIM", dims=":,:", ignore_device=True), dict(name="INT3", buf="KBUF", ftype="INTEGER", kind="JPIM", dims=":,:,:", ignore_device=True), dict(name="LOGICAL1", buf="LDBUF", ftype="LOGICAL", kind="", dims=":", ignore_device=False), dict(name="CHAR1", buf="CDBUF", ftype="CHARACTER(LEN=*)", kind="", dims=":", ignore_device=False)]
+#:set scalar_procs = [dict(name="REAL4_SCALAR", buf="PBUF", ftype="REAL", kind="JPRM"), dict(name="REAL8_SCALAR", buf="PBUF", ftype="REAL", kind="JPRD"), dict(name="INT_SCALAR", buf="KBUF", ftype="INTEGER", kind="JPIM"), dict(name="LOGICAL_SCALAR", buf="LDBUF", ftype="LOGICAL", kind=""), dict(name="CHAR_SCALAR", buf="CDBUF", ftype="CHARACTER(LEN=*)", kind="")]
+
+#:endmute
+
+MODULE MPL_BROADCAST_MOD
+
+!**** MPL_BROADCAST Message broadcast
+
+!     Purpose.
+!     --------
+!     Broadcasts a message from the process with rank root
+!     to all processes in the group.
+
+!**   Interface.
+!     ----------
+!        CALL MPL_BROADCAST
+
+!        Input required arguments :
+!        -------------------------
+!           PBUF     -  buffer containing message
+!                       (can be type REAL*4, REAL*8 or INTEGER)
+!           KTAG     -  message tag
+
+!        Input optional arguments :
+!        -------------------------
+!           KROOT    -  number of root process (default=1)
+!           KCOMM    -  Communicator number if different from MPI_COMM_WORLD
+!                       or from that established as the default
+!                       by an MPL communicator routine
+!           KMP_TYPE -  buffering type (see MPL_BUFFER_METHOD)
+!                       overrides value provided to MPL_BUFFER_METHOD
+!           CDSTRING -  Character string for ABORT messages
+!                       used when KERROR is not provided
+!
+!        Output required arguments :
+!        -------------------------
+!           none
+
+!        Output optional arguments :
+!        -------------------------
+!           KREQUEST -  Communication request
+!                       required when buffering type is non-blocking
+!           KERROR   -  return error code.     If not supplied,
+!                       MPL_BROADCAST aborts when an error is detected.
+!     Author.
+!     -------
+!        D.Dent, M.Hamrud, S.Saarinen    ECMWF
+
+!     Modifications.
+!     --------------
+!        Original: 2000-09-01
+!        P.Marguinaud : 2012-04-13 : Cleaning & refactor PREAMB1
+!        P.Marguinaud : 2012-09-11 : Add MPL_BROADCAST_LOGICAL1
+!        M.Hamrud     : 2014-10-22 : Add nonblocking option
+!      F. Vana  05-Mar-2015  Support for single precision
+
+!     ------------------------------------------------------------------
+
+IMPLICIT NONE
+
+LOGICAL :: LLABORT=.TRUE.
+
+INTERFACE MPL_BROADCAST
+
+#:for proc in array_procs
+MODULE SUBROUTINE MPL_BROADCAST_${proc["name"]}$(${proc["buf"]}$,KTAG,KROOT,KMP_TYPE,&
+                               KCOMM,KERROR,KREQUEST,CDSTRING)
+USE EC_PARKIND, ONLY : JPRD, JPIM, JPIB, JPRM
+#:if proc["kind"]
+${proc["ftype"]}$(KIND=${proc["kind"]}$)            :: ${proc["buf"]}$(${proc["dims"]}$)
+#:else
+${proc["ftype"]}$                       :: ${proc["buf"]}$(${proc["dims"]}$)
+#:endif
+#:if proc["ignore_device"]
+IGNORE_DEVICE ${proc["buf"]}$
+#:endif
+INTEGER(KIND=JPIM),INTENT(IN)          :: KTAG
+INTEGER(KIND=JPIM),INTENT(IN),OPTIONAL :: KROOT,KCOMM,KMP_TYPE
+INTEGER(KIND=JPIM),INTENT(OUT),OPTIONAL :: KERROR,KREQUEST
+CHARACTER(LEN=*),INTENT(IN),OPTIONAL :: CDSTRING
+
+END SUBROUTINE MPL_BROADCAST_${proc["name"]}$
+
+#:endfor
+
+#:for proc in scalar_procs
+MODULE SUBROUTINE MPL_BROADCAST_${proc["name"]}$(${proc["buf"]}$,KTAG,KROOT,KMP_TYPE,&
+                               KCOMM,KERROR,KREQUEST,CDSTRING)
+USE EC_PARKIND, ONLY : JPRD, JPIM, JPIB, JPRM
+#:if proc["kind"]
+${proc["ftype"]}$(KIND=${proc["kind"]}$)           :: ${proc["buf"]}$
+#:else
+${proc["ftype"]}$                       :: ${proc["buf"]}$
+#:endif
+INTEGER(KIND=JPIM),INTENT(IN)          :: KTAG
+INTEGER(KIND=JPIM),INTENT(IN),OPTIONAL :: KROOT,KCOMM,KMP_TYPE
+INTEGER(KIND=JPIM),INTENT(OUT),OPTIONAL :: KERROR,KREQUEST
+CHARACTER(LEN=*),INTENT(IN),OPTIONAL :: CDSTRING
+END SUBROUTINE MPL_BROADCAST_${proc["name"]}$
+
+#:endfor
+
+END INTERFACE
+
+END MODULE MPL_BROADCAST_MOD

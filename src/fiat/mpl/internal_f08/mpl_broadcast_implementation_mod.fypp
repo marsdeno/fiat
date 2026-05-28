@@ -1,0 +1,243 @@
+! (C) Copyright 2005- ECMWF.
+! (C) Copyright 2013- Meteo-France.
+!
+! This software is licensed under the terms of the Apache Licence Version 2.0
+! which can be obtained at http://www.apache.org/licenses/LICENSE-2.0.
+! In applying this licence, ECMWF does not waive the privileges and immunities
+! granted to it by virtue of its status as an intergovernmental organisation
+! nor does it submit to any jurisdiction.
+!
+#:mute
+
+#:set array_procs = [dict(name="REAL4", buf="PBUF", mpi_type="MPI_REAL4", zero_check=True, dummy_decl="REAL(KIND=JPRM)    :: ZDUM(1:0)", dummy_name="ZDUM"), dict(name="REAL42", buf="PBUF", mpi_type="MPI_REAL4", zero_check=True, dummy_decl="REAL(KIND=JPRM)    :: ZDUM(1:0)", dummy_name="ZDUM"), dict(name="REAL43", buf="PBUF", mpi_type="MPI_REAL4", zero_check=True, dummy_decl="REAL(KIND=JPRM)    :: ZDUM(1:0)", dummy_name="ZDUM"), dict(name="REAL44", buf="PBUF", mpi_type="MPI_REAL4", zero_check=True, dummy_decl="REAL(KIND=JPRM)    :: ZDUM(1:0)", dummy_name="ZDUM"), dict(name="REAL8", buf="PBUF", mpi_type="MPI_REAL8", zero_check=True, dummy_decl="REAL(KIND=JPRD)    :: ZDUM(1:0)", dummy_name="ZDUM"), dict(name="REAL82", buf="PBUF", mpi_type="MPI_REAL8", zero_check=True, dummy_decl="REAL(KIND=JPRD)    :: ZDUM(1:0)", dummy_name="ZDUM"), dict(name="REAL83", buf="PBUF", mpi_type="MPI_REAL8", zero_check=True, dummy_decl="REAL(KIND=JPRD)    :: ZDUM(1:0)", dummy_name="ZDUM"), dict(name="REAL84", buf="PBUF", mpi_type="MPI_REAL8", zero_check=True, dummy_decl="REAL(KIND=JPRD)    :: ZDUM(1:0)", dummy_name="ZDUM"), dict(name="LONG", buf="KBUF", mpi_type="MPI_INTEGER8", zero_check=True, dummy_decl="INTEGER(KIND=JPIB) :: IDUM(1:0)", dummy_name="IDUM"), dict(name="INT", buf="KBUF", mpi_type="MPI_INTEGER", zero_check=True, dummy_decl="INTEGER(KIND=JPIM) :: IDUM(1:0)", dummy_name="IDUM"), dict(name="INT2", buf="KBUF", mpi_type="MPI_INTEGER", zero_check=True, dummy_decl="INTEGER(KIND=JPIM) :: IDUM(1:0)", dummy_name="IDUM"), dict(name="INT3", buf="KBUF", mpi_type="MPI_INTEGER", zero_check=True, dummy_decl="INTEGER(KIND=JPIM) :: IDUM(1:0)", dummy_name="IDUM"), dict(name="LOGICAL1", buf="LDBUF", mpi_type="MPI_LOGICAL", zero_check=True, dummy_decl="LOGICAL            :: LDUM(1:0)", dummy_name="LDUM"), dict(name="CHAR1", buf="CDBUF", mpi_type="MPI_BYTE", zero_check=True, dummy_decl="CHARACTER(LEN=1)   :: CDUM(1:0)", dummy_name="CDUM")]
+#:set scalar_procs = [dict(name="REAL4_SCALAR", buf="PBUF", mpi_type="MPI_REAL4"), dict(name="REAL8_SCALAR", buf="PBUF", mpi_type="MPI_REAL8"), dict(name="INT_SCALAR", buf="KBUF", mpi_type="MPI_INTEGER"), dict(name="LOGICAL_SCALAR", buf="LDBUF", mpi_type="MPI_LOGICAL"), dict(name="CHAR_SCALAR", buf="CDBUF", mpi_type="MPI_BYTE")]
+
+#:endmute
+
+SUBMODULE (MPL_BROADCAST_MOD) MPL_BROADCAST_IMPLEMENTATION_MOD
+
+!**** MPL_BROADCAST Message broadcast
+
+!     Purpose.
+!     --------
+!     Broadcasts a message from the process with rank root
+!     to all processes in the group.
+
+!**   Interface.
+!     ----------
+!        CALL MPL_BROADCAST
+
+!        Input required arguments :
+!        -------------------------
+!           PBUF     -  buffer containing message
+!                       (can be type REAL*4, REAL*8 or INTEGER)
+!           KTAG     -  message tag
+
+!        Input optional arguments :
+!        -------------------------
+!           KROOT    -  number of root process (default=1)
+!           KCOMM    -  Communicator number if different from MPI_COMM_WORLD
+!                       or from that established as the default
+!                       by an MPL communicator routine
+!           KMP_TYPE -  buffering type (see MPL_BUFFER_METHOD)
+!                       overrides value provided to MPL_BUFFER_METHOD
+!           CDSTRING -  Character string for ABORT messages
+!                       used when KERROR is not provided
+!
+!        Output required arguments :
+!        -------------------------
+!           none
+
+!        Output optional arguments :
+!        -------------------------
+!           KREQUEST -  Communication request
+!                       required when buffering type is non-blocking
+!           KERROR   -  return error code.     If not supplied,
+!                       MPL_BROADCAST aborts when an error is detected.
+!     Author.
+!     -------
+!        D.Dent, M.Hamrud, S.Saarinen    ECMWF
+
+!     Modifications.
+!     --------------
+!        Original: 2000-09-01
+!        P.Marguinaud : 2012-04-13 : Cleaning & refactor PREAMB1
+!        P.Marguinaud : 2012-09-11 : Add MPL_BROADCAST_LOGICAL1
+!        M.Hamrud     : 2014-10-22 : Add nonblocking option
+!      F. Vana  05-Mar-2015  Support for single precision
+
+!     ------------------------------------------------------------------
+
+USE EC_PARKIND, ONLY : JPRD, JPIM, JPIB, JPRM
+USE OML_MOD,    ONLY : OML_MY_THREAD
+
+USE MPL_MPI,         ONLY : MPI_COMM, MPI_REQUEST, MPI_REAL4, MPI_REAL8, MPI_INTEGER, MPI_INTEGER8, &
+ &                          MPI_BYTE, MPI_LOGICAL, MPI_BCAST, MPI_IBCAST, MPI_COMM_SIZE
+USE MPL_DATA_MODULE, ONLY : MPL_NUMPROC, MPL_COMM_OML, MPL_RANK, MPL_METHOD, &
+ &                                   JP_BLOCKING_STANDARD, JP_BLOCKING_BUFFERED, &
+ &                                   JP_NON_BLOCKING_STANDARD, JP_NON_BLOCKING_BUFFERED
+USE MPL_STATS_MOD,   ONLY : MPL_RECVSTATS, MPL_SENDSTATS
+USE YOMMPLSTATS,     ONLY : LMPLSTATS
+USE MPL_MESSAGE_MOD, ONLY : MPL_MESSAGE
+USE MPL_MYRANK_MOD,  ONLY : MPL_MYRANK
+
+IMPLICIT NONE
+
+CONTAINS
+
+!     ------------------------------------------------------------------
+
+SUBROUTINE MPL_BROADCAST_PREAMB1(KROOTR,KCOMMR,KPL_NUMPROC,KPL_MYRANK,KMP_TYPER,LDRETURN,KERROR,KCOMM,KROOT,KMP_TYPE)
+INTEGER(KIND=JPIM),INTENT(OUT) :: KROOTR,KCOMMR,KPL_NUMPROC,KPL_MYRANK,KMP_TYPER
+LOGICAL,INTENT(OUT) :: LDRETURN
+INTEGER(KIND=JPIM),INTENT(OUT),OPTIONAL :: KERROR
+INTEGER(KIND=JPIM),INTENT(IN),OPTIONAL :: KCOMM,KROOT,KMP_TYPE
+
+INTEGER(KIND=JPIM) :: ITID
+LOGICAL :: LLABORT=.TRUE.
+
+ITID = OML_MY_THREAD()
+
+IF(MPL_NUMPROC < 1) CALL MPL_MESSAGE(&
+  & CDMESSAGE='MPL_BROADCAST: MPL NOT INITIALISED ',LDABORT=LLABORT)
+
+IF(PRESENT(KMP_TYPE)) THEN
+  KMP_TYPER=KMP_TYPE
+ELSE
+  KMP_TYPER=MPL_METHOD
+ENDIF
+
+IF(PRESENT(KCOMM)) THEN
+  KCOMMR=KCOMM
+ELSE
+  KCOMMR=MPL_COMM_OML(ITID)
+ENDIF
+
+KPL_NUMPROC = MPL_NUMPROC
+KPL_MYRANK  = MPL_MYRANK(KCOMMR)
+IF(PRESENT(KROOT)) THEN
+  KROOTR = KROOT
+ELSE
+  KROOTR = 1
+ENDIF
+
+LDRETURN=.FALSE.
+IF(KROOTR < 1 .OR. KROOTR > KPL_NUMPROC) THEN
+  LDRETURN=.TRUE.
+  CALL MPL_MESSAGE(CDMESSAGE='MPL_BROADCAST: ILLEGAL KROOT ',LDABORT=LLABORT)
+ENDIF
+
+IF(KMP_TYPER == JP_NON_BLOCKING_STANDARD .AND. (.NOT. PRESENT(KERROR))) THEN
+  CALL MPL_MESSAGE(CDMESSAGE='MPL_BROADCAST:KREQUEST MISSING ',LDABORT=LLABORT)
+ENDIF
+
+END SUBROUTINE MPL_BROADCAST_PREAMB1
+
+!     ------------------------------------------------------------------
+
+#:for proc in array_procs
+MODULE PROCEDURE MPL_BROADCAST_${proc["name"]}$
+
+TYPE(MPI_REQUEST)  :: IREQUEST_LOCAL
+INTEGER(KIND=JPIM) :: ICOUNT,IROOT,ICOMM,IMP_TYPE,IERROR,INUMPROC,IRANK
+LOGICAL :: LDRETURN
+
+#:if proc["dummy_decl"]
+${proc["dummy_decl"]}$
+#:endif
+
+CALL MPL_BROADCAST_PREAMB1(IROOT,ICOMM,INUMPROC,IRANK,IMP_TYPE,LDRETURN,IERROR,KCOMM,KROOT,KMP_TYPE)
+
+IF(LDRETURN) RETURN
+
+ICOUNT = SIZE(${proc["buf"]}$)
+
+#ifdef MPL_CHECK_CONTIG
+IF( .NOT. IS_CONTIGUOUS(${proc["buf"]}$) ) THEN
+  CALL MPL_MESSAGE(CDMESSAGE='MPL_BROADCAST: BUFFER NOT CONTIGUOUS ',LDABORT=LLABORT)
+ENDIF
+#endif
+
+IF(LMPLSTATS) THEN
+  IF(IRANK == IROOT) THEN
+    CALL MPL_SENDSTATS(ICOUNT,${proc["mpi_type"]}$%MPI_VAL)
+  ELSE
+    CALL MPL_RECVSTATS(ICOUNT,${proc["mpi_type"]}$%MPI_VAL)
+  ENDIF
+ENDIF
+
+#:if proc["zero_check"]
+IF (ICOUNT == 0) THEN
+  IF(IMP_TYPE == JP_BLOCKING_STANDARD .OR. IMP_TYPE == JP_BLOCKING_BUFFERED) THEN
+    CALL MPI_BCAST(${proc["dummy_name"]}$,ICOUNT,${proc["mpi_type"]}$,IROOT-1,ICOMM,IERROR)
+  ELSE IF(IMP_TYPE == JP_NON_BLOCKING_STANDARD .OR. IMP_TYPE == JP_NON_BLOCKING_BUFFERED) THEN
+    CALL MPI_IBCAST(${proc["dummy_name"]}$,ICOUNT,${proc["mpi_type"]}$,IROOT-1,ICOMM,IREQUEST_LOCAL,IERROR)
+    KREQUEST=IREQUEST_LOCAL%MPI_VAL
+  ELSE
+    CALL MPL_MESSAGE(CDMESSAGE='MPL_BROADCAST:ILLEGAL MP_TYPE ',LDABORT=LLABORT)
+  ENDIF
+ELSE
+#:endif
+  IF(IMP_TYPE == JP_BLOCKING_STANDARD .OR. IMP_TYPE == JP_BLOCKING_BUFFERED) THEN
+    CALL MPI_BCAST(${proc["buf"]}$,ICOUNT,${proc["mpi_type"]}$,IROOT-1,ICOMM,IERROR)
+  ELSE IF(IMP_TYPE == JP_NON_BLOCKING_STANDARD .OR. IMP_TYPE == JP_NON_BLOCKING_BUFFERED) THEN
+    CALL MPI_IBCAST(${proc["buf"]}$,ICOUNT,${proc["mpi_type"]}$,IROOT-1,ICOMM,IREQUEST_LOCAL,IERROR)
+    KREQUEST=IREQUEST_LOCAL%MPI_VAL
+  ELSE
+    CALL MPL_MESSAGE(CDMESSAGE='MPL_BROADCAST:ILLEGAL MP_TYPE ',LDABORT=LLABORT)
+  ENDIF
+#:if proc["zero_check"]
+ENDIF
+#:endif
+
+IF(PRESENT(KERROR)) THEN
+  KERROR=IERROR
+ELSE
+  IF(IERROR /= 0 ) CALL MPL_MESSAGE(CDMESSAGE='MPL_BROADCAST',CDSTRING=CDSTRING,KERROR=IERROR,LDABORT=LLABORT)
+ENDIF
+
+END PROCEDURE MPL_BROADCAST_${proc["name"]}$
+
+#:endfor
+
+#:for proc in scalar_procs
+MODULE PROCEDURE MPL_BROADCAST_${proc["name"]}$
+
+TYPE(MPI_REQUEST)  :: IREQUEST_LOCAL
+INTEGER(KIND=JPIM) :: ICOUNT,IROOT,ICOMM,IMP_TYPE,IERROR,INUMPROC,IRANK
+LOGICAL :: LDRETURN
+
+CALL MPL_BROADCAST_PREAMB1(IROOT,ICOMM,INUMPROC,IRANK,IMP_TYPE,LDRETURN,IERROR,KCOMM,KROOT,KMP_TYPE)
+
+IF(LDRETURN) RETURN
+
+ICOUNT = 1
+
+IF(LMPLSTATS) THEN
+  IF(IRANK == IROOT) THEN
+    CALL MPL_SENDSTATS(ICOUNT,${proc["mpi_type"]}$%MPI_VAL)
+  ELSE
+    CALL MPL_RECVSTATS(ICOUNT,${proc["mpi_type"]}$%MPI_VAL)
+  ENDIF
+ENDIF
+
+IF(IMP_TYPE == JP_BLOCKING_STANDARD .OR. IMP_TYPE == JP_BLOCKING_BUFFERED) THEN
+  CALL MPI_BCAST(${proc["buf"]}$,ICOUNT,${proc["mpi_type"]}$,IROOT-1,ICOMM,IERROR)
+ELSE IF(IMP_TYPE == JP_NON_BLOCKING_STANDARD .OR. IMP_TYPE == JP_NON_BLOCKING_BUFFERED) THEN
+  CALL MPI_IBCAST(${proc["buf"]}$,ICOUNT,${proc["mpi_type"]}$,IROOT-1,ICOMM,IREQUEST_LOCAL,IERROR)
+  KREQUEST=IREQUEST_LOCAL%MPI_VAL
+ELSE
+  CALL MPL_MESSAGE(CDMESSAGE='MPL_BROADCAST:ILLEGAL MP_TYPE ',LDABORT=LLABORT)
+ENDIF
+
+IF(PRESENT(KERROR)) THEN
+  KERROR=IERROR
+ELSE
+  IF(IERROR /= 0 ) CALL MPL_MESSAGE(CDMESSAGE='MPL_BROADCAST',CDSTRING=CDSTRING,KERROR=IERROR,LDABORT=LLABORT)
+ENDIF
+
+END PROCEDURE MPL_BROADCAST_${proc["name"]}$
+
+#:endfor
+
+END SUBMODULE MPL_BROADCAST_IMPLEMENTATION_MOD

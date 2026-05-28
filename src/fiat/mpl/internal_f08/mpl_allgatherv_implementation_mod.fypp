@@ -1,0 +1,179 @@
+! (C) Copyright 2005- ECMWF.
+! (C) Copyright 2013- Meteo-France.
+!
+! This software is licensed under the terms of the Apache Licence Version 2.0
+! which can be obtained at http://www.apache.org/licenses/LICENSE-2.0.
+! In applying this licence, ECMWF does not waive the privileges and immunities
+! granted to it by virtue of its status as an intergovernmental organisation
+! nor does it submit to any jurisdiction.
+!
+SUBMODULE (MPL_ALLGATHERV_MOD) MPL_ALLGATHERV_IMPLEMENTATION_MOD
+
+USE EC_PARKIND, ONLY : JPRD, JPIM ,JPRM
+USE OML_MOD,    ONLY : OML_MY_THREAD
+
+USE MPL_MPI,         ONLY : MPI_COMM, MPI_REQUEST, MPI_REAL4, MPI_REAL8, MPI_INTEGER, MPI_COMM_SIZE, MPI_ALLGATHERV, &
+ &                          MPI_IALLGATHERV
+USE MPL_DATA_MODULE, ONLY : MPL_COMM_OML, MPL_OUTPUT, MPL_UNIT, MPL_METHOD, MPL_NUMPROC, &
+ &                          JP_BLOCKING_STANDARD, JP_BLOCKING_BUFFERED, JP_NON_BLOCKING_STANDARD, JP_NON_BLOCKING_BUFFERED
+USE MPL_STATS_MOD,   ONLY : MPL_RECVSTATS, MPL_SENDSTATS
+USE YOMMPLSTATS,     ONLY : LMPLSTATS
+USE MPL_MESSAGE_MOD, ONLY : MPL_MESSAGE
+USE MPL_DISPLS_CONTAINER_MOD, ONLY : YDDISPLS_LIST
+
+IMPLICIT NONE
+
+CONTAINS
+
+#:def ALLGATHERV_PREAMB(CHECK_RECVCOUNTS)
+IF(PRESENT(KCOMM)) THEN
+  ICOMM%MPI_VAL=KCOMM
+ELSE
+  ICOMM%MPI_VAL=MPL_COMM_OML(ITID)
+ENDIF
+
+IF(ICOMM%MPI_VAL == MPL_COMM_OML(ITID)) THEN
+  IPL_NUMPROC = MPL_NUMPROC
+ELSE
+  CALL MPI_COMM_SIZE(ICOMM,IPL_NUMPROC,IERROR)
+ENDIF
+
+IF(PRESENT(KMP_TYPE)) THEN
+  IMP_TYPE=KMP_TYPE
+ELSE
+  IMP_TYPE=MPL_METHOD
+ENDIF
+
+IF(IMP_TYPE == JP_NON_BLOCKING_STANDARD .OR. IMP_TYPE == JP_NON_BLOCKING_BUFFERED) THEN
+  IF(.NOT.PRESENT(KREQUEST)) CALL MPL_MESSAGE(CDMESSAGE='MPL_ALLGATHERV:  KREQUEST MISSING',LDABORT=LLABORT)
+ENDIF
+
+IF(PRESENT(KRECVDISPL)) THEN
+  ! Use caller-provided displacements directly in the MPI call
+ELSE
+  IF(IMP_TYPE == JP_NON_BLOCKING_STANDARD .OR. IMP_TYPE == JP_NON_BLOCKING_BUFFERED) THEN
+    CALL YDDISPLS_LIST%APPEND(KNPROC=IPL_NUMPROC, KRECV_PT=IRECVDISPL_PT)
+  ELSE
+    ALLOCATE(IRECVDISPL(IPL_NUMPROC))
+    IRECVDISPL_PT => IRECVDISPL
+  END IF
+
+  IRECVDISPL_PT(1) = 0
+  #:if CHECK_RECVCOUNTS
+  IF (LKRECVCOUNTS) THEN
+    DO IR=2, IPL_NUMPROC
+      IRECVDISPL_PT(IR) = IRECVDISPL_PT(IR-1) + KRECVCOUNTS(IR-1)
+    ENDDO
+  ELSE
+    ! needed only for _int_scalar version where KRECVCOUNTS is optional
+    DO IR=2, IPL_NUMPROC
+      IRECVDISPL_PT(IR) = IRECVDISPL_PT(IR-1) + IRECVCOUNTS(IR-1)
+    ENDDO
+  ENDIF
+  #:else
+  DO IR=2, IPL_NUMPROC
+    IRECVDISPL_PT(IR) = IRECVDISPL_PT(IR-1) + IRECVCOUNTS(IR-1)
+  ENDDO
+  #:endif
+ENDIF
+#:enddef
+
+#:mute
+#:set procs = [dict(name="REAL4", sendbuf="PSENDBUF", recvbuf="PRECVBUF", send_default="SIZE(PSENDBUF)", recv_size="SIZE(PRECVBUF)", mpi_type="MPI_REAL4", stats_type="MPI_REAL4", recvcounts_optional=False, check_recvcounts=False, recvcounts_default="ISENDCOUNT"), dict(name="REAL8", sendbuf="PSENDBUF", recvbuf="PRECVBUF", send_default="SIZE(PSENDBUF)", recv_size="SIZE(PRECVBUF)", mpi_type="MPI_REAL8", stats_type="MPI_REAL8", recvcounts_optional=False, check_recvcounts=False, recvcounts_default="ISENDCOUNT"), dict(name="INT", sendbuf="KSENDBUF", recvbuf="KRECVBUF", send_default="SIZE(KSENDBUF)", recv_size="SIZE(KRECVBUF)", mpi_type="MPI_INTEGER", stats_type="MPI_INTEGER", recvcounts_optional=False, check_recvcounts=False, recvcounts_default="ISENDCOUNT"), dict(name="INT_SCALAR", sendbuf="KSENDBUF", recvbuf="KRECVBUF", send_default="1", recv_size="SIZE(KRECVBUF)", mpi_type="MPI_INTEGER", stats_type="MPI_INTEGER", recvcounts_optional=True, check_recvcounts=True, recvcounts_default="1")]
+#:endmute
+
+#:for proc in procs
+MODULE PROCEDURE MPL_ALLGATHERV_${proc["name"]}$
+
+#ifdef USE_8_BYTE_WORDS
+USE MPI4TO8, ONLY : &
+   MPI_COMM_SIZE => MPI_COMM_SIZE8, MPI_ALLGATHERV => MPI_ALLGATHERV8
+#endif
+
+IMPLICIT NONE
+INTEGER(KIND=JPIM) :: IR,ISENDCOUNT,IRECVCOUNT
+INTEGER(KIND=JPIM) :: IMP_TYPE
+INTEGER(KIND=JPIM) :: IRECVCOUNTS(MPL_NUMPROC)
+INTEGER(KIND=JPIM) :: IERROR,IPL_NUMPROC
+TYPE(MPI_COMM)     :: ICOMM
+TYPE(MPI_REQUEST)  :: IREQUEST_LOCAL
+INTEGER(KIND=JPIM) :: ITID
+INTEGER(KIND=JPIM),ALLOCATABLE,TARGET :: IRECVDISPL(:)
+INTEGER(KIND=JPIM), POINTER :: IRECVDISPL_PT(:)
+LOGICAL :: LKRECVCOUNTS
+LOGICAL :: LLABORT=.TRUE.
+
+ITID = OML_MY_THREAD()
+IF(PRESENT(KSENDCOUNT)) THEN
+   ISENDCOUNT = KSENDCOUNT
+ELSE
+   ISENDCOUNT = ${proc["send_default"]}$
+ENDIF
+IRECVCOUNT = ${proc["recv_size"]}$
+#:if proc["recvcounts_optional"]
+IF(PRESENT(KRECVCOUNTS)) THEN
+  #:if proc["check_recvcounts"]
+  IF(ANY(KRECVCOUNTS < 0) .OR. ANY(KRECVCOUNTS > 1)) THEN
+     CALL MPL_MESSAGE(CDMESSAGE='MPL_ALLGATHERV_INT_SCALAR: KRECVCOUNTS contains <0 or >1 counts',LDABORT=LLABORT)
+  ENDIF
+  #:endif
+  IRECVCOUNTS=KRECVCOUNTS
+  LKRECVCOUNTS = .TRUE.
+ELSE
+  IRECVCOUNTS(:) = ${proc["recvcounts_default"]}$
+  LKRECVCOUNTS = .FALSE.
+ENDIF
+#:else
+IRECVCOUNTS=KRECVCOUNTS
+LKRECVCOUNTS = .TRUE.
+#:endif
+!--------- Preamble repeated for threadsafe--------------
+#:if proc["check_recvcounts"]
+#:call ALLGATHERV_PREAMB(True)
+#:endcall
+#:else
+#:call ALLGATHERV_PREAMB(False)
+#:endcall
+#:endif
+!--------- End of Preamble --------------
+
+IF(IMP_TYPE == JP_BLOCKING_STANDARD .OR. IMP_TYPE == JP_BLOCKING_BUFFERED) THEN
+  IF(PRESENT(KRECVDISPL)) THEN
+    CALL MPI_ALLGATHERV(${proc["sendbuf"]}$,ISENDCOUNT,${proc["mpi_type"]}$,${proc["recvbuf"]}$,IRECVCOUNTS,&
+     &  KRECVDISPL,${proc["mpi_type"]}$,ICOMM,IERROR)
+  ELSE
+    CALL MPI_ALLGATHERV(${proc["sendbuf"]}$,ISENDCOUNT,${proc["mpi_type"]}$,${proc["recvbuf"]}$,IRECVCOUNTS,&
+     &  IRECVDISPL_PT,${proc["mpi_type"]}$,ICOMM,IERROR)
+  ENDIF
+ELSEIF(IMP_TYPE == JP_NON_BLOCKING_STANDARD .OR. IMP_TYPE == JP_NON_BLOCKING_BUFFERED) THEN
+  IF(PRESENT(KRECVDISPL)) THEN
+    CALL MPI_IALLGATHERV(${proc["sendbuf"]}$,ISENDCOUNT,${proc["mpi_type"]}$,${proc["recvbuf"]}$,IRECVCOUNTS,&
+     &  KRECVDISPL,${proc["mpi_type"]}$,ICOMM,IREQUEST_LOCAL,IERROR)
+  ELSE
+    CALL MPI_IALLGATHERV(${proc["sendbuf"]}$,ISENDCOUNT,${proc["mpi_type"]}$,${proc["recvbuf"]}$,IRECVCOUNTS,&
+     &  IRECVDISPL_PT,${proc["mpi_type"]}$,ICOMM,IREQUEST_LOCAL,IERROR)
+  ENDIF
+  KREQUEST=IREQUEST_LOCAL%MPI_VAL
+  IF(.NOT. PRESENT(KRECVDISPL)) THEN
+    CALL YDDISPLS_LIST%APPEND(KREQ=KREQUEST,NO_NEW_NODE=.TRUE.)
+  ENDIF
+ENDIF
+IF(LMPLSTATS) THEN
+  CALL MPL_SENDSTATS(ISENDCOUNT,${proc["stats_type"]}$%MPI_VAL)
+  CALL MPL_RECVSTATS(SUM(IRECVCOUNTS),${proc["stats_type"]}$%MPI_VAL)
+ENDIF
+
+IF(MPL_OUTPUT > 1 )THEN
+   WRITE(MPL_UNIT,'(A,5I8)') ' MPL_ALLGATHERV ',ISENDCOUNT,IRECVCOUNT,ICOMM
+ENDIF
+IF(PRESENT(KERROR)) THEN
+   KERROR=IERROR
+ELSE
+  IF(IERROR /= 0 ) CALL MPL_MESSAGE(CDMESSAGE='MPL_ALLGATHERV',CDSTRING=CDSTRING,KERROR=IERROR,LDABORT=LLABORT)
+ENDIF
+
+END PROCEDURE MPL_ALLGATHERV_${proc["name"]}$
+
+#:endfor
+
+END SUBMODULE MPL_ALLGATHERV_IMPLEMENTATION_MOD

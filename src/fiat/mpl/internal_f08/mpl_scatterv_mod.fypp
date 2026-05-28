@@ -1,0 +1,110 @@
+! (C) Copyright 2005- ECMWF.
+! (C) Copyright 2013- Meteo-France.
+!
+! This software is licensed under the terms of the Apache Licence Version 2.0
+! which can be obtained at http://www.apache.org/licenses/LICENSE-2.0.
+! In applying this licence, ECMWF does not waive the privileges and immunities
+! granted to it by virtue of its status as an intergovernmental organisation
+! nor does it submit to any jurisdiction.
+!
+#:mute
+
+#:set procs = [dict(name="REAL8", recv="PRECVBUF", send="PSENDBUF", ftype="REAL", kind="JPRD"), dict(name="REAL4", recv="PRECVBUF", send="PSENDBUF", ftype="REAL", kind="JPRM"), dict(name="INTEGER", recv="KRECVBUF", send="KSENDBUF", ftype="INTEGER", kind="JPIM")]
+
+#:endmute
+
+MODULE MPL_SCATTERV_MOD
+
+!**** MPL_SCATTERV Scatter data from specific processor
+
+!     Purpose.
+!     --------
+!     Scatter data from specific processor
+!     The data may be REAL*8,or INTEGER, one dimensional array
+!
+!**   Interface.
+!     ----------
+!        CALL MPL_SCATTERV
+
+!        Input required arguments :
+!        -------------------------
+!           PRECVBUF -  buffer containing message
+!                       (can be type REAL*4, REAL*8 or INTEGER)
+!           PSENDBUF -  buffer containing message
+!                       (required from kroot)
+!                       (can be type REAL*4, REAL*8 or INTEGER)
+!           KSENDCOUNTS-number of elements to be sent to each process
+!                       (required from kroot processor)
+
+!        Input optional arguments :
+!        -------------------------
+!           KROOT    -  rank of sending processor (default 1)
+!           KCOMM    -  Communicator number if different from MPI_COMM_WORLD
+!                       or from that established as the default
+!                       by an MPL communicator routine
+!           KMP_TYPE -  buffering type (see MPL_BUFFER_METHOD)
+!                       overrides value provided to MPL_BUFFER_METHOD
+!           KSENDDISPL -displacements in PRECVBUF at which to place
+!                       the incoming data
+!           CDSTRING -  Character string for ABORT messages
+!                       used when KERROR is not provided
+
+!        Output required arguments :
+!        -------------------------
+!           none
+
+!        Output optional arguments :
+!        -------------------------
+!           KREQUEST -  Communication request
+!                       required when buffering type is non-blocking
+!           KERROR   -  return error code.     If not supplied,
+!                       MPL_SCATTERV aborts when an error is detected.
+!     Author.
+!     -------
+!        Y. Tremolet, M.Hamrud     ECMWF
+
+!     Modifications.
+!     --------------
+!        Original: 02-03-13
+!        M.Hamrud     : 2014-10-22 : Add nonblocking option
+!      F. Vana  05-Mar-2015  Support for single precision
+
+! --- *NOT* THREAD SAFE YET ---
+
+!     ----------------------------------------------------------------
+
+IMPLICIT NONE
+
+! ------------------------------------------------------------------
+
+INTERFACE MPL_SCATTERV
+
+#:for proc in procs
+MODULE SUBROUTINE MPL_SCATTERV_${proc["name"]}$(${proc["recv"]}$,KROOT,${proc["send"]}$,KSENDCOUNTS,KSENDDISPL,&
+  & KMP_TYPE,KCOMM,KERROR,KREQUEST,CDSTRING)
+
+USE EC_PARKIND, ONLY : JPRD, JPIM, JPRM
+#ifdef USE_8_BYTE_WORDS
+USE MPI4TO8, ONLY : &
+  MPI_SCATTERV => MPI_SCATTERV8
+#endif
+
+${proc["ftype"]}$(KIND=${proc["kind"]}$), INTENT(OUT) :: ${proc["recv"]}$(..)
+IGNORE_DEVICE ${proc["recv"]}$
+INTEGER(KIND=JPIM), INTENT(IN) :: KROOT
+${proc["ftype"]}$(KIND=${proc["kind"]}$), INTENT(IN),OPTIONAL  :: ${proc["send"]}$(..)
+IGNORE_DEVICE ${proc["send"]}$
+INTEGER(KIND=JPIM), INTENT(IN),OPTIONAL :: KSENDCOUNTS(:)
+INTEGER(KIND=JPIM), INTENT(IN),TARGET,OPTIONAL :: KSENDDISPL(:)
+INTEGER(KIND=JPIM), INTENT(IN),OPTIONAL :: KCOMM,KMP_TYPE
+INTEGER(KIND=JPIM),INTENT(OUT),OPTIONAL :: KERROR,KREQUEST
+CHARACTER(LEN=*),INTENT(IN),OPTIONAL :: CDSTRING
+
+END SUBROUTINE MPL_SCATTERV_${proc["name"]}$
+
+#:endfor
+
+END INTERFACE
+! ------------------------------------------------------------------
+
+END MODULE MPL_SCATTERV_MOD
